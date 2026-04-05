@@ -1,0 +1,4 @@
+DPAI2.0:直接拉大解码器输入通道数
+DPAI_FPN:使用普通卷积上采样方式恢复
+DPAI_UNet:使用unet上采样方式恢复
+DPAI_deeplabv3p:使用deeplabv3p解码器

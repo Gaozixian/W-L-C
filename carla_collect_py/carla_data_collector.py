@@ -133,9 +133,6 @@ class CarlaDataCollector:
         """挂载前后左右四个摄像头"""
         # 摄像头配置：方向、挂载位置、旋转角度
         self._get_vehicle_dimensions()
-        # length = self.dimensions['length']
-        # width = self.dimensions['width']
-        # height = self.dimensions['height']
         bounding_box = self.vehicle.bounding_box
         # 包围盒的 extent 是半长/半宽/半高，因此需要乘以 2 得到实际尺寸
         length = bounding_box.extent.x * 2.0  # 长度（X轴）
@@ -147,9 +144,13 @@ class CarlaDataCollector:
         camera_height = height * 1.2
         side_distance = width / 2 + 0.1
         camera_configs = [
+            # ("front", carla.Transform(
+            #     carla.Location(x=front_distance, z=camera_height),
+            #     carla.Rotation(pitch=0)
+            # )),
             ("front", carla.Transform(
-                carla.Location(x=front_distance, z=camera_height),
-                carla.Rotation(pitch=0)
+                carla.Location(x=2.0, y=0.0, z=2.5),
+                carla.Rotation(pitch=-10)
             )),
             ("back", carla.Transform(
                 carla.Location(x=-back_distance, z=camera_height),
@@ -168,8 +169,17 @@ class CarlaDataCollector:
         camera_bp = self.blueprint_library.find("sensor.camera.rgb")
         camera_bp.set_attribute("image_size_x", str(self.camera_width))
         camera_bp.set_attribute("image_size_y", str(self.camera_height))
-        camera_bp.set_attribute("fov", "90")
+        camera_bp.set_attribute("fov", "110")
         camera_bp.set_attribute("sensor_tick", str(self.sensor_tick))
+        camera_bp.set_attribute("motion_blur_intensity", "0.0")  # 禁用运动模糊
+        camera_bp.set_attribute("motion_blur_max_distortion", "0.0")
+        camera_bp.set_attribute("motion_blur_min_object_screen_size", "0.0")
+        camera_bp.set_attribute("lens_circle_multiplier", "0.0")  # 禁用镜头效果
+        camera_bp.set_attribute("lens_circle_falloff", "0.0")
+        camera_bp.set_attribute("lens_k", "-1.0")
+        camera_bp.set_attribute("lens_kcube", "0.0")
+        camera_bp.set_attribute("lens_x_size", "0.0")
+        camera_bp.set_attribute("lens_y_size", "0.0")
         # 生成摄像头并注册回调
         for direction, transform in camera_configs:
             camera = self.world.spawn_actor(camera_bp, transform, attach_to=self.vehicle)

@@ -1,6 +1,5 @@
 import os
 from os import name
-
 import torch
 import pandas as pd
 import numpy as np
@@ -24,7 +23,6 @@ def inverse_transform(normalized_data, target_names, scaler_params):
 def prepare_multiple_datasets_and_scaler(input_files, output_csv, scaler_json_path, seq_length=9):
     """
     汇总多个 CSV 文件并处理，确保不同文件的首尾不被当作连续帧处理。
-    
     Args:
         input_files (list): 包含多个 CSV 文件路径的列表。
         output_csv (str): 输出处理后的 CSV 文件路径。
@@ -36,10 +34,25 @@ def prepare_multiple_datasets_and_scaler(input_files, output_csv, scaler_json_pa
     file_start_indices = [] # 新增：记录每个文件的起始位置
     current_pos = 0
     for file in input_files:
-        df = pd.read_csv(file)
-        dfs.append(df)
-        file_start_indices.append(current_pos) # 记录该文件的 0 帧位置
-        current_pos += len(df)
+        # 🌟 新增：检查文件大小，如果是 0 字节直接跳过
+        if not os.path.exists(file) or os.path.getsize(file) == 0:
+            print(f"⚠️ 跳过空文件或不存在的文件: {file}")
+            continue
+            
+        try:
+            df = pd.read_csv(file)
+            if df.empty:
+                print(f"⚠️ 跳过无数据的 CSV: {file}")
+                continue
+                
+            dfs.append(df)
+            file_start_indices.append(current_pos)
+            current_pos += len(df)
+        except Exception as e:
+            print(f"❌ 读取文件 {file} 时出错: {e}")
+            continue
+    if not dfs:
+        raise ValueError("错误：所有提供的输入文件都是空的或无效的，请检查数据！")
     
     combined_df = pd.concat(dfs, ignore_index=True)
 
@@ -53,16 +66,16 @@ def prepare_multiple_datasets_and_scaler(input_files, output_csv, scaler_json_pa
         start_idx = next_start
 
     # 3. 定义特征列（区分图片和数值）
-    image_cols = ['front_image', 'back_image', 'left_image']
+    image_cols = ['front_image', 'back_image', 'left_image', 'right_image']
     numeric_input_cols = [
         'global_x', 'global_y', 'global_z',
         'velocity_x', 'velocity_y', 'velocity_z',
-        'steer', 'acceleration_x', 'acceleration_y', 'acceleration_z'
+        'steer', 'acceleration_x', 'acceleration_y', 'acceleration_z', 'speed_kmh'
     ]
     target_cols = ['velocity', 'steer']
 
     # 计算速度标量
-    combined_df['velocity'] = (combined_df['velocity_x']**2 + combined_df['velocity_y']**2 + combined_df['velocity_z']**2)**0.5
+    combined_df['velocity'] = combined_df['speed_kmh']
 
     # 4. 数据归一化 (仅针对数值列)
     scaler = MinMaxScaler()
@@ -114,7 +127,7 @@ def prepare_multiple_datasets_and_scaler(input_files, output_csv, scaler_json_pa
 class ProcessedDrivingDataset(Dataset):
     """
     专门解析带有 JSON history 列的端到端驾驶数据集
-    - 图像流输入: t-2, t-1, t (保留当前帧)
+    - 图像流输入: t-4, t-2, t (保留当前帧)
     - 状态流输入: 过去 8 帧 (剔除当前帧，防止数据泄露)
     """
 
@@ -145,30 +158,37 @@ class ProcessedDrivingDataset(Dataset):
 
     def __getitem__(self, idx):
         row = self.data_df.iloc[idx]
-
-        # ---------------- A. 视觉数据 (取最后3帧: t-2, t-1, t) ----------------
+        # ---------------- A. 视觉数据 ----------------
         front_images = json.loads(row['front_image_history'])
-        # 截取最后三张，当前帧是 front_images[-1]
-        img_paths = [front_images[-3], front_images[-2], front_images[-1]]
-
-        images = []
-        for path in img_paths:
-            full_path = os.path.join(self.root_dir, path) if self.root_dir else path
-            img = Image.open(full_path).convert('RGB')
-            if self.transform:
-                img = self.transform(img)
-            images.append(img)
-
-        img_t_minus_2, img_t_minus_1, img_t = images
-
-        # ---------------- A2. 侧向视觉数据 (取当前帧 t 的左侧摄像机图像) ----------------
         left_images = json.loads(row['left_image_history'])
-        side_img_path = left_images[-1] # 当前帧
-        
-        side_full_path = os.path.join(self.root_dir, side_img_path) if self.root_dir else side_img_path
-        side_img = Image.open(side_full_path).convert('RGB')
-        if self.transform:
-            side_img = self.transform(side_img)
+        right_images = json.loads(row['right_image_history'])
+        back_images = json.loads(row['back_image_history'])
+        left_path = left_images[-1]
+        right_path = right_images[-1]
+        back_path = back_images[-1]
+        img_paths = [front_images[-5], front_images[-3], front_images[-1]]
+
+        def safe_load(path): # 安全加载图片
+            full_path = os.path.join(self.root_dir, path) if self.root_dir else path
+            try:
+                img = Image.open(full_path).convert('RGB')
+                if self.transform:
+                    img = self.transform(img)
+                return img
+            except Exception as e:
+                # 打印出具体是哪个文件坏了，并填充全黑图防止程序崩溃
+                print(f"⚠️ 跳过损坏图片: {full_path}")
+                # 返回与你 transform 后尺寸一致的黑图 (3, 224, 224)
+                return torch.zeros((3, 224, 224))
+
+        f_imgs = [safe_load(p) for p in img_paths]
+        l_img = safe_load(left_path)
+        r_img = safe_load(right_path)
+        b_img = safe_load(back_path)
+
+        img_t_minus_2, img_t_minus_1, img_t = f_imgs
+        side_imgs = [l_img, r_img, b_img] 
+
 
         # ---------------- B. 状态历史数据 (去掉当前帧 t) ----------------
         state_features = []
@@ -190,7 +210,7 @@ class ProcessedDrivingDataset(Dataset):
             row['target_steer']      # 转角
         ], dtype=torch.float32)
 
-        return (img_t_minus_2, img_t_minus_1, img_t), side_img, state_seq_tensor, target_tensor
+        return (img_t_minus_2, img_t_minus_1, img_t), side_imgs, state_seq_tensor, target_tensor
 
 if __name__ == '__main__':
     input_files = ['1_1.csv', '1_2.csv']

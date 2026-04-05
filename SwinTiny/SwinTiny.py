@@ -1,5 +1,6 @@
 import torch
 import torch.nn as nn
+import os
 import torch.nn.functional as F
 import timm
 
@@ -105,29 +106,59 @@ class FrontViewSwinTiny(nn.Module):
         # 提取 Stage 1 到 Stage 4 的层
         self.layers = base_swin.layers
 
-    def load_pretrained_swin(self):
-        """
-        核心逻辑：加载 Swin-Tiny 预训练权重并适配 4 通道 PatchEmbed
-        """
-        print(">>> 正在加载前向视角 Swin-Tiny 预训练权重...")
-        # 1. 获取官方预训练模型
-        official_model = timm.create_model('swin_tiny_patch4_window7_224', pretrained=True)
-        official_dict = official_model.state_dict()
-        model_dict = self.state_dict()
+    # def load_pretrained_swin(self):
+    #     """
+    #     核心逻辑：加载 Swin-Tiny 预训练权重并适配 4 通道 PatchEmbed
+    #     """
+    #     print(">>> 正在加载前向视角 Swin-Tiny 预训练权重...")
+    #     # 1. 获取官方预训练模型
+    #     official_model = timm.create_model('swin_tiny_patch4_window7_224', pretrained=True)
+    #     official_dict = official_model.state_dict()
+    #     model_dict = self.state_dict()
 
-        # 2. 特殊处理 patch_embed.proj.weight (4 通道适配)
-        # 官方是 [96, 3, 4, 4], 我们需要 [96, 4, 4, 4]
+    #     # 2. 特殊处理 patch_embed.proj.weight (4 通道适配)
+    #     # 官方是 [96, 3, 4, 4], 我们需要 [96, 4, 4, 4]
+    #     if 'patch_embed.proj.weight' in official_dict:
+    #         old_weight = official_dict['patch_embed.proj.weight']
+    #         new_weight = torch.zeros(96, 4, 4, 4)
+    #         new_weight[:, :3, :, :] = old_weight
+    #         new_weight[:, 3, :, :] = old_weight.mean(dim=1) # Mask 通道初始化
+    #         official_dict['patch_embed.proj.weight'] = new_weight
+
+    #     # 3. 匹配并加载其余层
+    #     updated_dict = {k: v for k, v in official_dict.items() if k in model_dict and v.size() == model_dict[k].size()}
+    #     self.load_state_dict(updated_dict, strict=False)
+    #     print(">>> 前向视角权重适配完成！")
+    def load_pretrained_swin(self, local_path=r'E:\Laboratory files\code_project\D2D\weights\swin_tiny_patch4_window7_224.pth'):
+        """
+        核心逻辑：加载本地 Swin-Tiny 预训练权重并适配 4 通道 PatchEmbed
+        """
+        if not os.path.exists(local_path):
+            print(f"❌ 找不到本地权重文件: {local_path}，加载失败！")
+            return
+        print(f">>> 正在从本地加载前向视角 Swin-Tiny 权重: {local_path}")
+        
+        # 1. 直接从本地文件加载权重字典
+        checkpoint = torch.load(local_path, map_location='cpu')
+        # 兼容处理：有些 .pth 文件带有 'model' 键，有些直接是字典
+        official_dict = checkpoint['model'] if 'model' in checkpoint else checkpoint
+        
+        model_dict = self.state_dict()
+        # 2. 特殊处理 patch_embed.proj.weight (4 通道适配，这部分逻辑保留你原来的)
         if 'patch_embed.proj.weight' in official_dict:
             old_weight = official_dict['patch_embed.proj.weight']
-            new_weight = torch.zeros(96, 4, 4, 4)
-            new_weight[:, :3, :, :] = old_weight
-            new_weight[:, 3, :, :] = old_weight.mean(dim=1) # Mask 通道初始化
-            official_dict['patch_embed.proj.weight'] = new_weight
-
+            # 官方是 [96, 3, 4, 4], 我们需要 [96, 4, 4, 4]
+            if old_weight.shape[1] == 3:
+                new_weight = torch.zeros(96, 4, 4, 4)
+                new_weight[:, :3, :, :] = old_weight
+                new_weight[:, 3, :, :] = old_weight.mean(dim=1) # Mask 通道初始化
+                official_dict['patch_embed.proj.weight'] = new_weight
+                print(">>> 已完成 4 通道 PatchEmbed 权重映射适配。")
         # 3. 匹配并加载其余层
         updated_dict = {k: v for k, v in official_dict.items() if k in model_dict and v.size() == model_dict[k].size()}
         self.load_state_dict(updated_dict, strict=False)
         print(">>> 前向视角权重适配完成！")
+  
 
     def forward(self, rgb, mask):
         # 1. 语义注入阶段

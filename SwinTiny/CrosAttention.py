@@ -37,7 +37,7 @@ class TemporalCrossAttention(nn.Module):
             nn.Linear(ffn_dim, embed_dim)
         )
 
-    def forward(self, feat_t, feat_t_minus_1, feat_t_minus_2):
+    def forward(self, feat_t, feat_t_minus_1, feat_t_minus_2, return_attn=False):
         """
         Args:
             feat_t: 当前帧特征 [B, 196, 384]
@@ -79,4 +79,7 @@ class TemporalCrossAttention(nn.Module):
         out = self.norm2(x + self.ffn(x))
 
         # 输出形状依然是 [B, 196, 384]
+        if return_attn:
+            return out, attn_output
+        
         return out

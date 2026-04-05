@@ -8,14 +8,11 @@ from PIL import Image
 import numpy as np
 import os
 import random
-import sys
-import json
 import matplotlib.pyplot as plt
 from datetime import datetime
 from torchvision import transforms
 
 # ==================== 1. 基础组件：Bottleneck ====================
-
 class Bottleneck(nn.Module):
     """ResNet50的瓶颈块 (引用自原文件)"""
     expansion = 4
@@ -411,9 +408,8 @@ def visualize_result(image_path, output, class_colors, save_dir='results_png'):
 # 主函数
 def main():
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    weight_path = 'checkpoints/best_model.pth'  # 替换为你的模型权重路径
+    weight_path = 'dpai/best_model.pth'  # 替换为你的模型权重路径
     image_path = 'frankfurt_000000_000294_leftImg8bit.png'  # 替换为你的测试图片路径
-
 
     # 加载模型
     model = load_model(weight_path, device)

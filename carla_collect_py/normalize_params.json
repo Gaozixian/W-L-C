@@ -1,0 +1,50 @@
+{
+    "steer": {
+        "min_max": {
+            "original_min": -0.731285,
+            "original_max": 0.6329498,
+            "target_min": 0,
+            "target_max": 1
+        },
+        "zscore": {
+            "original_mean": -0.033321591378079864,
+            "original_std": 0.12829886353597783
+        }
+    },
+    "throttle": {
+        "min_max": {
+            "original_min": 0.0,
+            "original_max": 1.0,
+            "target_min": 0,
+            "target_max": 1
+        },
+        "zscore": {
+            "original_mean": 0.9676066228547154,
+            "original_std": 0.1732332501767338
+        }
+    },
+    "brake": {
+        "min_max": {
+            "original_min": 0,
+            "original_max": 0,
+            "target_min": 0,
+            "target_max": 1
+        },
+        "zscore": {
+            "original_mean": 0.0,
+            "original_std": 0.0
+        }
+    },
+    "speed_kmh": {
+        "min_max": {
+            "original_min": 1.81e-07,
+            "original_max": 30.5612,
+            "target_min": 0,
+            "target_max": 1
+        },
+        "zscore": {
+            "original_mean": 28.796880249983012,
+            "original_std": 5.879583843259572
+        }
+    }
+}

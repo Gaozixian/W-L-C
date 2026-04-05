@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>驾驶数据归一化方法说明</title>
+    <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: "Microsoft YaHei", Arial, sans-serif;
+        }
+        body {
+            background-color: #f5f7fa;
+            padding: 20px;
+            line-height: 1.6;
+            color: #333;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #3498db;
+        }
+        h2 {
+            color: #3498db;
+            margin: 25px 0 15px;
+            font-size: 20px;
+        }
+        h3 {
+            color: #2980b9;
+            margin: 20px 0 10px;
+            font-size: 18px;
+        }
+        .formula {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            border-left: 4px solid #3498db;
+            font-size: 16px;
+        }
+        .example {
+            background-color: #e8f4fd;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        table th, table td {
+            padding: 12px;
+            text-align: left;
+            border: 1px solid #ddd;
+        }
+        table th {
+            background-color: #3498db;
+            color: white;
+        }
+        table tr:nth-child(even) {
+            background-color: #f8f9fa;
+        }
+        .code-block {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-family: "Consolas", monospace;
+            overflow-x: auto;
+            font-size: 14px;
+        }
+        .note {
+            background-color: #fff3cd;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            border-left: 4px solid #ffc107;
+        }
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            table {
+                font-size: 14px;
+            }
+            table th, table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>驾驶数据归一化方法详解</h1>
+
+        <h2>一、Min-Max 归一化（最小-最大归一化）</h2>
+        <p>将特征值从原始范围映射到指定目标区间（默认 [0,1]），保留特征的相对比例，适用于有明确物理范围的特征（如油门、刹车）。</p>
+
+        <h3>1. 核心计算公式</h3>
+        <div class="formula">
+            \[
+            \text{归一化后的值} = \frac{\text{原始值} - \text{原始最小值}}{\text{原始最大值} - \text{原始最小值}} \times (\text{target_max} - \text{target_min}) + \text{target_min}
+            \]
+        </div>
+        <p>参数说明：</p>
+        <ul>
+            <li>原始最小值/最大值：该特征在训练集中的最小/最大值</li>
+            <li>target_min/target_max：目标区间（默认 0/1）</li>
+        </ul>
+
+        <h3>2. 实际数据计算实例（转向角 steer）</h3>
+        <div class="example">
+            <p>已知：</p>
+            <ul>
+                <li>原始最小值 = -0.731285</li>
+                <li>原始最大值 = 0.632950</li>
+                <li>目标区间 = [0,1]</li>
+                <li>某条数据原始转向角 = 0.0</li>
+            </ul>
+            <p>计算：</p>
+            \[
+            \text{steer_minmax} = \frac{0.0 - (-0.731285)}{0.632950 - (-0.731285)} \times (1 - 0) + 0 \approx 0.53604
+            \]
+            <p>结果：该条数据的转向角 Min-Max 归一化值为 0.53604（在 [0,1] 区间内）</p>
+        </div>
+
+        <h3>3. 特殊情况处理</h3>
+        <div class="note">
+            若某列所有值相同（如刹车 brake 列全为 0），则 <code>原始最大值 - 原始最小值 = 0</code>，为避免除以 0 错误，直接将归一化值设为 target_min（默认 0）。
+        </div>
+
+        <h3>4. 代码实现示例</h3>
+        <div class="code-block">
+def min_max_normalize(df, col, feature_range=(0, 1)):
+    original_min = df[col].min()
+    original_max = df[col].max()
+    target_min, target_max = feature_range
+
+    if original_max - original_min < 1e-10:
+        return [target_min] * len(df)
+
+    normalized = (df[col] - original_min) / (original_max - original_min) * (target_max - target_min) + target_min
+    return normalized
+        </div>
+
+        <h2>二、Z-Score 标准化（标准差标准化）</h2>
+        <p>将特征值转换为符合标准正态分布（均值=0，标准差=1）的数值，削弱异常值影响，适用于无明确范围的特征（如转向角、速度）。</p>
+
+        <h3>1. 核心计算公式</h3>
+        <div class="formula">
+            \[
+            \text{标准化后的值} = \frac{\text{原始值} - \text{原始均值}}{\text{原始标准差}}
+            \]
+        </div>
+        <p>参数说明：</p>
+        <ul>
+            <li>原始均值：该特征在训练集中的平均值</li>
+            <li>原始标准差：该特征在训练集中的标准差</li>
+        </ul>
+
+        <h3>2. 实际数据计算实例（速度 speed_kmh）</h3>
+        <div class="example">
+            <p>已知：</p>
+            <ul>
+                <li>原始均值 ≈ 28.79688</li>
+                <li>原始标准差 ≈ 5.879584</li>
+                <li>某条数据原始速度 = 0.000009 km/h</li>
+            </ul>
+            <p>计算：</p>
+            \[
+            \text{speed_kmh_zscore} = \frac{0.000009 - 28.79688}{5.879584} \approx -4.89777
+            \]
+            <p>结果：该条数据的速度 Z-Score 标准化值为 -4.89777（均值为 0，标准差为 1）</p>
+        </div>
+
+        <h3>3. 特殊情况处理</h3>
+        <div class="note">
+            若某列所有值相同（标准差=0），直接将标准化值设为 0（符合标准正态分布的均值）。
+        </div>
+
+        <h3>4. 代码实现示例</h3>
+        <div class="code-block">
+def zscore_normalize(df, col):
+    original_mean = df[col].mean()
+    original_std = df[col].std()
+
+    if original_std < 1e-10:
+        return [0.0] * len(df)
+
+    normalized = (df[col] - original_mean) / original_std
+    return normalized
+        </div>
+
+        <h2>三、两种方法对比</h2>
+        <table>
+            <tr>
+                <th>对比维度</th>
+                <th>Min-Max 归一化</th>
+                <th>Z-Score 标准化</th>
+            </tr>
+            <tr>
+                <td>结果范围</td>
+                <td>可自定义（默认 [0,1]）</td>
+                <td>无固定范围（通常 [-3,3]）</td>
+            </tr>
+            <tr>
+                <td>异常值影响</td>
+                <td>大（压缩正常数据范围）</td>
+                <td>小（均值/标准差缓冲）</td>
+            </tr>
+            <tr>
+                <td>适用特征</td>
+                <td>有明确物理范围（油门、刹车）</td>
+                <td>无明确范围（转向角、速度）</td>
+            </tr>
+            <tr>
+                <td>适用模型</td>
+                <td>神经网络、CNN/RNN（对范围敏感）</td>
+                <td>线性回归、SVM、KNN（对分布敏感）</td>
+            </tr>
+            <tr>
+                <td>逆归一化难度</td>
+                <td>简单（需保存最值）</td>
+                <td>简单（需保存均值/标准差）</td>
+            </tr>
+        </table>
+
+        <h2>四、使用建议</h2>
+        <div class="note">
+            <p>1. 训练集/验证集/测试集必须使用<strong>训练集的归一化参数</strong>，不可单独计算测试集参数；</p>
+            <p>2. 神经网络优先选 Min-Max 归一化，传统机器学习模型优先选 Z-Score 标准化；</p>
+            <p>3. 模型输出需通过逆归一化还原为物理值（如 km/h、转向角度）。</p>
+        </div>
+    </div>
+</body>
+</html>
